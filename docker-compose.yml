@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: governance-ai-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - PROJECT_NAME=Delegation Chain Governor
+      - VERSION=1.0.0
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - HOST=0.0.0.0
+      - PORT=8000
+      - MONGODB_URI=${MONGODB_URI:-mongodb://localhost:27017/delegation_governor}
+      - MONGODB_DB_NAME=${MONGODB_DB_NAME:-delegation_governor}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.6-flash}
+      - ED25519_PRIVATE_KEY_HEX=${ED25519_PRIVATE_KEY_HEX:-1337133713371337133713371337133713371337133713371337133713371337}
+      - MAX_DELEGATION_DEPTH=4
+      - DEFAULT_TOKEN_TTL_SECONDS=300
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: governance-ai-frontend
+    restart: always
+    ports:
+      - "80:80"
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy

@@ -143,14 +143,24 @@ async def test_delegation_cust101_to_cust102_blocked(async_client: AsyncClient):
         "/api/v1/governor/tokens/mint-root",
         json={"task_type": "single_customer_audit", "target_agent": "agent_a"}
     )
-    token_a = mint_res.json()["token"]
+    # Delegate A -> B for CUST-101
+    del_b = await async_client.post(
+        "/api/v1/governor/tokens/delegate",
+        json={
+            "parent_token": token_a,
+            "target_agent": "agent_b",
+            "requested_scopes": ["financials:read:summary"],
+            "requested_data_scope": {"customer_ids": ["CUST-101"]}
+        }
+    )
+    token_b = del_b.json()["token"]
 
     # Attempt to expand data scope to CUST-102
     del_res = await async_client.post(
         "/api/v1/governor/tokens/delegate",
         json={
-            "parent_token": token_a,
-            "target_agent": "agent_b",
+            "parent_token": token_b,
+            "target_agent": "agent_c",
             "requested_scopes": ["financials:read:summary"],
             "requested_data_scope": {"customer_ids": ["CUST-102"]}
         }

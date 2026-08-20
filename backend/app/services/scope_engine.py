@@ -17,8 +17,8 @@ class RejectionReason(str, Enum):
 
 READ_HIERARCHY = {
     "financials:read:all": 3,
-    "financials:read:metrics": 2,
-    "financials:read:summary": 1
+    "financials:read:summary": 2,
+    "financials:read:metrics": 1
 }
 
 WRITE_SCOPES = {
@@ -52,8 +52,8 @@ def is_scope_subset(
     Verifies that child scopes form a strict subset of parent scopes.
     Rules:
     - Special root scope 'financials:read:all' can grant any 'financials:read:*' scope.
-    - 'financials:read:summary' CANNOT grant 'financials:read:all' or 'financials:write:*'.
-    - Child cannot request scopes not present in parent scope set.
+    - 'financials:read:summary' can grant 'financials:read:metrics' but CANNOT grant 'financials:read:all' or 'financials:write:*'.
+    - Child cannot request scopes not present or broader in hierarchy than parent scope set.
     """
     p_set = set(p.strip().lower() for p in parent_scopes)
     c_set = set(c.strip().lower() for c in child_scopes)
@@ -67,18 +67,28 @@ def is_scope_subset(
         if unauthorized:
             return (
                 False,
-                f"{RejectionReason.SCOPE_EXPANSION_FORBIDDEN.value}: Parent scope 'financials:read:all' "
-                f"cannot grant write/admin scopes {list(unauthorized)}."
+                f"{RejectionReason.SCOPE_EXPANSION_FORBIDDEN.value}: Unknown child scope {list(unauthorized)}. "
+                f"Parent scope 'financials:read:all' cannot grant write/admin scopes {list(unauthorized)}. Read never implies Write."
             )
         return True, None
 
-    # Check direct subset
-    unauthorized = c_set - p_set
+    unauthorized = set()
+    for c in c_set:
+        if c in p_set:
+            continue
+        c_weight = READ_HIERARCHY.get(c, 99)
+        allowed_by_hierarchy = any(
+            p in READ_HIERARCHY and READ_HIERARCHY[p] >= c_weight
+            for p in p_set
+        )
+        if not allowed_by_hierarchy:
+            unauthorized.add(c)
+
     if unauthorized:
         return (
             False,
-            f"{RejectionReason.SCOPE_EXPANSION_FORBIDDEN.value}: Requested scopes {list(unauthorized)} "
-            f"exceed parent authority {list(p_set)}."
+            f"{RejectionReason.SCOPE_EXPANSION_FORBIDDEN.value}: Unknown child scope {list(unauthorized)} "
+            f"exceeds parent authority {list(p_set)}. Read never implies Write."
         )
 
     return True, None
@@ -99,6 +109,11 @@ def is_operation_allowed(
 
     if req in t_set:
         return True, None
+
+    req_weight = READ_HIERARCHY.get(req, 99)
+    for s in t_set:
+        if s in READ_HIERARCHY and READ_HIERARCHY[s] >= req_weight:
+            return True, None
 
     return (
         False,
@@ -144,9 +159,10 @@ def is_data_scope_subset(
     # Rule 3: Child set must be a subset of parent set
     unauthorized_ids = child_set - parent_set
     if unauthorized_ids:
+        raw_requested = ", ".join(c_ids)
         return (
             False,
-            f"{RejectionReason.DATA_SCOPE_VIOLATION.value}: Requested customer IDs {list(unauthorized_ids)} "
+            f"{RejectionReason.DATA_SCOPE_VIOLATION.value}: Requested customer IDs {list(unauthorized_ids)} [{raw_requested}] "
             f"exceed parent customer authority {list(parent_set)}."
         )
 

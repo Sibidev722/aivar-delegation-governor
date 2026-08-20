@@ -18,6 +18,7 @@ from app.models.agent import (
 )
 from app.models.token import DataScope
 from app.services.governor_service import GovernorService
+from app.services.scope_engine import normalize_customer_id
 from app.services.agent_client import AgentHTTPClient
 from app.llm import (
     default_llm_provider,
@@ -60,7 +61,6 @@ async def execute_agent_a(request: AgentAExecutionRequest) -> AgentExecutionResp
 
     # Step 1: LLM Reasoning for Agent A Orchestration Plan
     import re
-    from app.services.scope_engine import normalize_customer_id
 
     match = re.search(r'CUST-\d+', prompt_text, re.IGNORECASE)
     extracted_cid = match.group(0) if match else request.customer_id
